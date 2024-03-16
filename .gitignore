@@ -1,0 +1,8 @@
+.venv
+.venv/*
+detection-dataset
+__pycache__
+
+*.png
+*.jpg
+*.zip
