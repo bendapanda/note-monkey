@@ -13,7 +13,7 @@ class Line():
         """Takes a list of boxes with percentages as points"""
         self.sections = np.array(sections)
     
-    def segment_image(self, image, num_channels=1):
+    def segment_image(self, image: np.ndarray):
         """Takes in any image, and performs its line segmentation on it."""
         height, width = image.shape[:2]
         min_x = int(width * np.min(self.sections[:, 0]))
@@ -21,10 +21,10 @@ class Line():
         min_y = int(height * np.min(self.sections[:, 1]))
         max_y = int(height * np.max(self.sections[:, 3]))
 
-        if num_channels > 1:
-            line_image = np.ones((max_y-min_y, max_x-min_x, num_channels))
-        else:
+        if len(image.shape) <= 2:
             line_image = np.ones((max_y-min_y, max_x-min_x))
+        else:
+            line_image = np.ones((max_y-min_y, max_x-min_x, image.shape[2]))
         line_image *= 255
         line_image = line_image.astype(np.uint8)
         for x1, y1, x2, y2 in self.sections:
@@ -33,13 +33,11 @@ class Line():
                        int(width*x1)-min_x:int(width*x2)-min_x] = image[int(height*y1):int(height*y2), int(width*x1):int(width*x2)]
         return line_image
 
-def segment(filename, verbosity=0):
-    image = cv2.imread(filename)
+def segment(image, verbosity=0) -> list[Line]:
     if verbosity >= 2:
         cv2.imshow("original image", preprocessor.resize_img(image))
         cv2.waitKey(0)
         cv2.destroyAllWindows()
-    processed = preprocessor.preprocess_img(image)
     if verbosity >= 2:
         cv2.imshow("preprocessed image", preprocessor.resize_img(processed))
         cv2.waitKey(0)
@@ -79,22 +77,23 @@ def segment(filename, verbosity=0):
     if verbosity >= 1:
         cv2.imshow("painting test", resized.astype(np.uint8))
         cv2.waitKey(0)
-        cv2.destroyAllWindows()
-
+        cv2.destroyAllWindows()    
+    
     lines = create_lines(painted_stripes)
     save_name = filename.split('.')[0]
     save_name = save_name.split('/')[1]
     save_count = 0
     for line in lines:
-        save_dir = "/home/bensh/Documents/code/note-monkey/line-images"
-        save_filename = f"{save_name}_{save_count}.jpg"
-        print(save_filename)
-        save_count += 1
-        cv2.imwrite(os.path.join(save_dir, save_filename), line.segment_image(preprocessor.otsu_thresholding(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY))))
+        # save_dir = "/home/bensh/Documents/code/note-monkey/line-images"
+        # save_filename = f"{save_name}_{save_count}.jpg"
+        # print(save_filename)
+        # save_count += 1
+        # cv2.imwrite(os.path.join(save_dir, save_filename), line.segment_image(preprocessor.otsu_thresholding(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY))))
         if verbosity >= 1:
             cv2.imshow("line", preprocessor.resize_img(line.segment_image(image)))
             cv2.waitKey(0)
             cv2.destroyAllWindows()
+    return lines
 
 def create_lines(stripes):
     lines = []
