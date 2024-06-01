@@ -1,13 +1,16 @@
 import os
 import cv2
-import preprocessor
+import random
+import src.preprocessor as preprocessor
 from deslant_img import deslant_img
 import numpy as np
 from segmentation_tests_paper import segment as segment_lines
 from segmentation_tests_paper import Line
 from sklearn.neighbors import KernelDensity
+from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
 from copy import deepcopy
+from src.imagehandler import ImageHandler, DeliveryMode
 
 
 
@@ -51,6 +54,124 @@ def segment(image, verbosity=0):
             cv2.imshow("connected_component", component)
             cv2.waitKey(0)
             cv2.destroyAllWindows()
+
+def dp_segment_by_whitespace(image: np.ndarray, verbosity:int=0) -> list[np.ndarray]:
+    """First goes through every pixel in the top row and attempts to find the shortest
+    path to the bottom row that does not touch a black pixel.
+    
+    Then, analyses the set of lines generated to find the number of seperation points
+    (using some sort of clustering algorithm), and makes the cuts"""
+
+    # first, resize the image, and crop it tightly
+    image = preprocessor.crop_image_tight(image)
+    scaled_down_image = preprocessor.resize_img(image)
+
+    # Perform dp
+    cache = np.array([[0 for j in range(scaled_down_image.shape[1])] for i in range(scaled_down_image.shape[0])]).astype(np.float32)
+    next_step = cache.copy().astype(int)
+    # Now, we need to go bottom up and determine the cost to reach bottom from the nodes.
+    # if the node is black, set the cost to infinity
+    for i in range(cache.shape[1]):
+        if scaled_down_image[-1, i] == 0:
+            cache[-1, i] = np.inf
+
+    DIAGONAL_PENALTY = 2
+    DOWN_PENALTY = 0
+    for y_index in range(cache.shape[0]-2, -1, -1):
+        for x_index in range(cache.shape[1]):
+            # if the position is a black pixel, we can never make it here
+            if scaled_down_image[y_index, x_index] == 0:
+                cache[y_index, x_index] = np.inf
+                next_step[y_index, x_index] = -1
+            else:
+                # we have 3 options: down, leftdown, rightdown
+                if x_index - 1 < 0:
+                    left_score = np.inf
+                else:
+                    left_score = DIAGONAL_PENALTY + cache[y_index+1, x_index-1]
+                if x_index + 1 > cache.shape[1]-1:
+                    right_score = np.inf
+                else: 
+                    right_score = DIAGONAL_PENALTY + cache[y_index+1, x_index+1]
+                
+                down_score = DOWN_PENALTY + cache[y_index+1, x_index]
+
+                #record the minimum score and therefore what the next steps are
+                score = min(left_score, down_score, right_score)
+                cache[y_index, x_index] = score
+                if score == np.inf:
+                    next_step[y_index, x_index] = -1
+                elif down_score == score:
+                    next_step[y_index, x_index] = x_index
+                elif left_score == score:
+                    next_step[y_index, x_index] = x_index - 1
+                else:
+                    next_step[y_index, x_index] = x_index + 1
+    
+    # Now, we need to construct the paths through the image
+    paths = []
+    for x_index in range(cache.shape[1]):
+        path = []
+        current_index = x_index
+        if next_step[0, current_index] != -1:
+            for y_index in range(cache.shape[0]):
+                path.append(current_index)
+                current_index = next_step[y_index, current_index]
+            paths.append(np.array(path))
+    
+    paths = np.array(paths)
+    # Now, we need to take these paths, and seperate them into clusters.
+    labels = dbscan_path_clustering(paths, scaled_down_image.shape[1])
+
+    # for each cluster, find the median line
+    clusters = {label: [] for label in labels}
+    for i in range(len(paths)):
+        clusters[labels[i]].append(paths[i])
+    
+    median_lines = []
+    for path_cluster in clusters.values():
+        median_vector = np.median(np.array(path_cluster), axis=0)
+        median_lines.append(median_vector)
+
+    
+    # to test this we need to be able to visualise
+    if verbosity>=3:
+        # create a random colour per class
+        print(f"{len(np.unique(labels))} classes found")
+
+        colours = []
+        for i in range(len(np.unique(labels))):
+            colours.append((random.randint(0, 255),random.randint(0, 255),random.randint(0, 255)))
+        
+        visualised_image = scaled_down_image.copy()
+        visualised_image = cv2.cvtColor(visualised_image, cv2.COLOR_GRAY2BGR)
+        for start_index in range(len(paths)):
+            path = paths[start_index]
+            if path is not None:
+                for y_value in range(visualised_image.shape[0]):
+                    visualised_image[y_value, path[y_value]] = colours[labels[start_index]]
+        
+        #visualised_image = preprocessor.resize_img(visualised_image, resize_factor=4)
+        cv2.imshow("paths", visualised_image)
+        cv2.waitKey(0)
+    
+    
+
+                   
+
+
+
+def dbscan_path_clustering(paths:np.array, img_width, eps=0.075, min_samples=3):
+    """Clustering algorithm called by dp segment by whitespace
+    Given the set of paths, seperates them into clusters and returns the different groups."""
+    #TODO hyperparameter adjustment
+    #TODO what metric is best?
+    #normalise paths to be between 0 and 1
+    normalised_paths = paths / img_width
+    min_value = 0
+    
+    cluster_maker = DBSCAN(eps=eps, min_samples=min_samples).fit(normalised_paths)
+    return cluster_maker.labels_
     
 
 def get_connected_components(image: np.ndarray) -> list[np.ndarray]:
@@ -212,4 +333,16 @@ def main():
             segment(line_image, verbosity=2)
 
 if __name__ == "__main__":
-    main()
+    handler = ImageHandler("line-images")
+    for i in range(5):
+        image = handler.get_new_image()
+        image = preprocessor.preprocess_img(image)
+        #image = preprocessor.resize_img(image, resize_factor=0.5)
+        image = preprocessor.remove_inperfections(image)
+        image = preprocessor.otsu_thresholding(image)
+
+        dp_segment_by_whitespace(image, verbosity=4)
+
+    #handler.show_image(image)
+
+    #dp_segment_by_whitespace(image)
