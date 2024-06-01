@@ -61,6 +61,23 @@ def otsu_thresholding(image):
     )
     return image_result
 
+def hough_transform_rotation(image):
+    """finds the most likely angle of the lines in the image, and will rotate the image so the line is level"""
+    lines = cv2.HoughLinesP(image, 1, np.pi / 180, 100, minLineLength=100, maxLineGap=10)
+    angles = []
+    for line in lines:
+        x1, y1, x2, y2 = line[0]
+        angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
+        angles.append(angle)
+    rotation_angle = np.median(angles)
+    
+    (h, w) = image.shape[:2]
+    center = (w // 2, h // 2)
+    M = cv2.getRotationMatrix2D(center, rotation_angle, 1.0)
+    rotated_image = cv2.warpAffine(image, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+    return rotated_image
+
+
 
 def blur_image(img, size=(5, 5)):
     new_img = img.copy()
@@ -87,4 +104,4 @@ def crop_image_tight(image):
     while np.all(image[:, right_dist-1] == 255):
         right_dist -= 1
 
-    return image[top_dist:bottom_dist, left_dist:right_dist]
+    return image[top_dist:bottom_dist-1, left_dist:right_dist-1]
