@@ -11,7 +11,7 @@ March 2024
 # 
 import numpy as np
 import cv2
-import preprocessor
+import src.preprocessor as preprocessor
 from sklearn.neighbors import KernelDensity
 from scipy.signal import argrelextrema
 import os

@@ -105,3 +105,35 @@ def crop_image_tight(image):
         right_dist -= 1
 
     return image[top_dist:bottom_dist-1, left_dist:right_dist-1]
+
+def remove_inperfections(image: np.ndarray) -> np.ndarray:
+    """Takes an image as inputs and tries to smooth out small imperfections caused by pen strokes, etc"""
+    # invert the image
+    inverted_image = cv2.bitwise_not(image)
+
+    # add blur to the image to try and soften jagged edges
+    blurred_image = cv2.GaussianBlur(inverted_image, (5, 5), 0)
+
+
+    # Apply morphological closing operation (dilation followed by erosion)
+    closing_kernel = np.ones((3, 3), np.uint8)
+    closing_image = cv2.morphologyEx(blurred_image, cv2.MORPH_CLOSE, closing_kernel)
+
+    # apply smoothing
+    smoothed_image = cv2.morphologyEx(closing_image, cv2.MORPH_OPEN, closing_kernel)
+
+    final_image = cv2.bitwise_not(smoothed_image)
+    return final_image
+
+if __name__ == "__main__":
+    filepath = "detection-dataset/20240128_090230.jpg"
+    image = cv2.imread(filepath)
+    image = preprocess_img(image)
+    cv2.imshow("before", image)
+    cv2.waitKey(0)
+    
+    # remove imperfections
+    new_image = remove_inperfections(image)
+    cv2.imshow("after", new_image)
+    cv2.waitKey(0)
+
