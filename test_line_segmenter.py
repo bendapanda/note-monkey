@@ -1,5 +1,5 @@
-from line import Line, LineSegmenter
-import preprocessor
+from src.line import Line, LineSegmenter
+import src.preprocessor as preprocessor
 import cv2
 import numpy as np
 import os
