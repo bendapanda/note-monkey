@@ -164,7 +164,7 @@ class LineSegmenter():
 
     chunk_percentage = 0.05
 
-    def segment(self, image: np.ndarray) -> list[Line]:
+    def segment(self, image: np.ndarray, verbosity=0) -> list[Line]:
         """segments an image and returns line objects"""
         proccessed_img = preprocessor.preprocess_img(image)
 
@@ -319,3 +319,10 @@ class LineSegmenter():
             locations = self._get_number_lines(line)
             if len(locations) > 1:
                 classified_chunks = self._assign_chunks_to_line(line, locations)
+
+if __name__ == "__main__":
+    image = cv2.imread("./misc-images/Selection_016.png")
+    s=LineSegmenter()
+    lines = s.segment(image)
+    for line in lines:
+        line.show(resize_factor=1)

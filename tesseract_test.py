@@ -8,6 +8,7 @@ import numpy as np
 def get_bboxes(img: Image) -> list[(int, int, int, int)]:
     result = []
     boxes = pytesseract.image_to_data(img, output_type=Output.DICT)
+    print(boxes)
     for i in range(len(boxes['level'])):
         x1 = int(boxes['left'][i])
         y1 = int(boxes['top'][i])
@@ -23,15 +24,15 @@ def draw_bboxes(frame: Image, bboxes: list[(int, int, int, int)]):
     frame = np.array(frame)
     for box in bboxes:
         frame = cv2.rectangle(frame, (box[0], box[1]),
-                              (box[2], box[3]), (255, 0, 0))
+                              (box[2], box[3]), (255, 0, 0), 8)
     return frame
 
 
 if __name__ == "__main__":
-    test_img = Image.open('detection-dataset/20240128_090136.jpg')
+    test_img = Image.open('line-images/20240128_090136_1.jpg')
     boxes = get_bboxes(test_img)
     annotated_img = draw_bboxes(test_img, boxes)
     annotated_img = cv2.resize(
-        annotated_img, (int(annotated_img.shape[1]/4), int(annotated_img.shape[0]/4)))
+        annotated_img, (int(annotated_img.shape[1]), int(annotated_img.shape[0])))
     cv2.imshow("test", annotated_img)
     cv2.waitKey(0)

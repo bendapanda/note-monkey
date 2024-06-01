@@ -1,4 +1,14 @@
-# https://www.researchgate.net/publication/220888490_Unconstrained_Handwritten_Text-line_Segmentation_Using_Morphological_Operation_and_Thinning_Algorithm
+"""
+This file contains my experiments into line segmentation of handwritten tests.
+I loosely followed this paper, with modifications to suit my purpose:
+https://www.researchgate.net/publication/220888490_Unconstrained_Handwritten_Text-line_Segmentation_Using_Morphological_Operation_and_Thinning_Algorithm
+
+The main function of note here is the segment function.
+Author: Ben Shirley
+March 2024
+"""
+
+# 
 import numpy as np
 import cv2
 import preprocessor
@@ -33,20 +43,25 @@ class Line():
                        int(width*x1)-min_x:int(width*x2)-min_x] = image[int(height*y1):int(height*y2), int(width*x1):int(width*x2)]
         return line_image
 
-def segment(image, verbosity=0) -> list[Line]:
+def segment(image: np.ndarray, verbosity:int=0) -> list[Line]:
+    """
+    Takes in a numpy image, and returns a list of line objects that
+    (in theory) contain the information to find one line of text each.\
+    
+    This process is done in a series of steps:
+    1. Split the image into 20% pieces
+    2. we paint the stripes based off of their average colour, and then binarise
+    3. we smooth the stripes to remove any large or weird rectangles
+    4. we extend the rectangles to connect with the others
+    5. we create the images.
+
+    """
     if verbosity >= 2:
         cv2.imshow("original image", preprocessor.resize_img(image))
         cv2.waitKey(0)
         cv2.destroyAllWindows()
-    if verbosity >= 2:
-        cv2.imshow("preprocessed image", preprocessor.resize_img(processed))
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
 
-
-    # Here we do two passes of essentially the same data. The first pass is to find the best
-    # stripe spacing, and the second is to process with that spacing
-    image_stripes, chunk_width = split_image(processed, 0.2)
+    image_stripes, chunk_width = split_image(image, 0.2)
     painted_stripes = []
     for stripe in image_stripes:
         stripe = paint_stripe(stripe)
@@ -71,31 +86,14 @@ def segment(image, verbosity=0) -> list[Line]:
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
-    painted_image = draw_segments(painted_stripes, image)
-    
-    resized = preprocessor.resize_img(painted_image)
-    if verbosity >= 1:
-        cv2.imshow("painting test", resized.astype(np.uint8))
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()    
     
     lines = create_lines(painted_stripes)
-    save_name = filename.split('.')[0]
-    save_name = save_name.split('/')[1]
-    save_count = 0
-    for line in lines:
-        # save_dir = "/home/bensh/Documents/code/note-monkey/line-images"
-        # save_filename = f"{save_name}_{save_count}.jpg"
-        # print(save_filename)
-        # save_count += 1
-        # cv2.imwrite(os.path.join(save_dir, save_filename), line.segment_image(preprocessor.otsu_thresholding(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY))))
-        if verbosity >= 1:
-            cv2.imshow("line", preprocessor.resize_img(line.segment_image(image)))
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
+    
     return lines
 
-def create_lines(stripes):
+def create_lines(stripes: list[np.ndarray]) -> list[Line]:
+    """Given an array of fully created stripes,
+    finds connected black rectangles, and creates lines for them."""
     lines = []
 
     boxes = []
@@ -124,7 +122,9 @@ def create_lines(stripes):
     
 
 def create_segment_images(stripes, image):
-    """given a list of stripes, segments the image into
+    """
+    DEPRECIATED
+    given a list of stripes, segments the image into
     line images."""
     # create boxes. 
     # go through each box in the list.
@@ -154,6 +154,9 @@ def create_segment_images(stripes, image):
 
 
 def create_line_image(coords, image):
+    """
+    DEPRECIATED
+    """
     max_x2 = max(coords, key=lambda x:x[2])[2]
     max_y2 = max(coords, key=lambda x: x[3])[3]
     min_x1 = min(coords, key=lambda x: x[0])[0]
@@ -164,11 +167,12 @@ def create_line_image(coords, image):
         line_image[y1-min_y1:y2-min_y1, x1-min_x1:x2-min_x1] = image[y1:y2, x1:x2]
     return line_image.astype(np.uint8)
 
-def pass_over_line(boxes, stripes, current_index, current_box_index, current_image_pieces=[]):
+def pass_over_line(boxes, stripes, current_index, current_box_index, current_image_pieces=[]) -> list[tuple[int, int, int, int]]:
+    """Recursively traverses an individual line left to right. 
+    Does not look up and down, so it is importaint this line is fully processed"""
     current_box = boxes[current_index][current_box_index]
     current_image_pieces.append(get_box_image_coords(current_box, current_index, stripes))
     
-
     boxes[current_index].pop(current_box_index)
     current_index += 1
     if current_index < len(boxes):
@@ -184,6 +188,7 @@ def pass_over_line(boxes, stripes, current_index, current_box_index, current_ima
 
 
 def get_box_image_coords(box, x_index, stripes):
+    """What does this do? why is it so complicated?"""
     stripe_width = stripes[0].shape[1]
     boxes_in_stripe = get_boxes(stripes[x_index], 0)
     box_index = boxes_in_stripe.index(box)
@@ -206,7 +211,9 @@ def get_box_image_coords(box, x_index, stripes):
     return (x1, y1, x2, y2)
 
 
-def draw_segments(stripes, original_img):
+def draw_segments(stripes: list[np.ndarray], original_img: np.ndarray) -> np.ndarray:
+    """For use as a visualisation tool. Takes in a list of fully formed stripes,
+    and paints the relevant cuts on the image so we can see how it segments."""
     result = original_img.copy()
     stripe_width = stripes[0].shape[1]
     for i in range(len(stripes)):
@@ -216,7 +223,9 @@ def draw_segments(stripes, original_img):
             result[height-3:height+3, int(i*stripe_width):int((i+1)*stripe_width)] = (255, 0, 0)
     return result 
 
-def remove_large_black_boxes(stripes):
+def remove_large_black_boxes(stripes: list[np.ndarray]) -> list[np.ndarray]:
+    """For use in the dialation operation. 
+    Large black boxes can result in two lines merging, so we need to remove them."""
     stripes = deepcopy(stripes)
     all_black_heights = []
     all_black_boxes = []
@@ -235,6 +244,7 @@ def remove_large_black_boxes(stripes):
     return stripes
 
 def dialation_operation(stripes, dialation_constant = 3):
+    """Depreciated"""
     
     stripes = remove_large_black_boxes(stripes)
 
@@ -549,4 +559,6 @@ def split_image(image: np.ndarray, chunk_percentage) -> list[np.ndarray]:
         
 if __name__ == "__main__":
     for filename in os.listdir("detection-dataset"):
-        segment("detection-dataset/" + filename, verbosity=0)
+        image = cv2.imread("detection-dataset/" + filename)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        segment(image, verbosity=3)
