@@ -131,12 +131,12 @@ def dp_segment_by_whitespace(image: np.ndarray, verbosity:int=0) -> list[np.ndar
     median_lines = []
     for path_cluster in clusters.values():
         median_vector = np.median(np.array(path_cluster), axis=0)
-        median_lines.append(median_vector)
-
-    
+        median_lines.append(median_vector.astype(int))
+        
     # to test this we need to be able to visualise
     if verbosity>=3:
         # create a random colour per class
+        print(f"image shape: {scaled_down_image.shape}")
         print(f"{len(np.unique(labels))} classes found")
 
         colours = []
@@ -151,11 +151,101 @@ def dp_segment_by_whitespace(image: np.ndarray, verbosity:int=0) -> list[np.ndar
                 for y_value in range(visualised_image.shape[0]):
                     visualised_image[y_value, path[y_value]] = colours[labels[start_index]]
         
+        # add the median lines - with a thickness of 3
+        for i in range(len(median_lines)):
+            for y_index in range(visualised_image.shape[0]):
+                if median_lines[i][y_index] < visualised_image.shape[1] -1 :
+                    visualised_image[y_index, median_lines[i][y_index]+1] = (0, 0, 255)
+                if median_lines[i][y_index] > 0:
+                    visualised_image[y_index, median_lines[i][y_index]-1] = (0, 0, 255)
+                visualised_image[y_index, median_lines[i][y_index]] = (0, 0, 255)
+                #print(y_index, median_lines[i][y_index], visualised_image[y_index, median_lines[i][y_index]])
+        
         #visualised_image = preprocessor.resize_img(visualised_image, resize_factor=4)
         cv2.imshow("paths", visualised_image)
         cv2.waitKey(0)
-    
-    
+
+    # finally, use the median paths to create our splits 
+    # we crop tight, so in theory, the outsides contain tokens too
+    # we also scaled down the image, so we need to work in percentages back in the original image
+
+    # start by scaling the paths in the x-axis
+    scaled_paths_x = []
+    original_width = image.shape[1]
+    scaled_width = scaled_down_image.shape[1]
+    for i in range(len(median_lines)):
+        scaled_paths_x.append((median_lines[i] * original_width / scaled_width).astype(int))
+
+    # Now the paths are obviously too short. the basic approch is as follows
+    desired_paths = []
+    original_height = image.shape[0]
+    scaled_height = scaled_down_image.shape[0]
+    for i in range(len(scaled_paths_x)):
+        # create a path of desired length
+        desired_length = int(len(scaled_paths_x[i]) * original_height / scaled_height)
+        desired_path = [None for j in range(desired_length)]
+        # we need to place the original path points at the correct locations
+        # At the same time we go through the gaps and just assign them on the lines between points
+        old_desired_index = 0
+        for scaled_index in range(len(scaled_paths_x[i])):
+            desired_index = int(scaled_index * original_height / scaled_height)
+            desired_path[desired_index] = scaled_paths_x[i][scaled_index]
+
+            # if have a gap to fill, we should
+            if scaled_index > 0:
+                num_to_fill = desired_index - old_desired_index
+                old_value = desired_path[old_desired_index]
+                new_value = desired_path[desired_index]
+                for gap_index in range(old_desired_index+1, desired_index):
+                    desired_path[gap_index] = int((new_value +old_value)/2)
+
+            old_desired_index = desired_index
+        # do we have a problem with no coverage at the end? in some cases yes!
+        # to correct, we just set them all to be the same as the last recorded value
+        for i in range(old_desired_index+1, original_height):
+            desired_path[i] = desired_path[old_desired_index]
+
+        desired_paths.append(desired_path)
+    desired_paths = np.array(desired_paths)
+
+    # I need to know what these upscaled paths look like in the context of the original image
+    if verbosity >= 4:
+        visualised_image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+        for i in range(len(desired_paths)):
+            for y_index in range(visualised_image.shape[0]):
+                if desired_paths[i][y_index] < visualised_image.shape[1] -1 :
+                    visualised_image[y_index, desired_paths[i][y_index]+1] = (0, 0, 255)
+                if desired_paths[i][y_index] > 0:
+                    visualised_image[y_index, desired_paths[i][y_index]-1] = (0, 0, 255)
+                visualised_image[y_index, desired_paths[i][y_index]] = (0, 0, 255)
+                #print(y_index, median_lines[i][y_index], visualised_image[y_index, median_lines[i][y_index]])
+        
+        #visualised_image = preprocessor.resize_img(visualised_image, resize_factor=4)
+        cv2.imshow("paths", visualised_image)
+        cv2.waitKey(0)
+
+
+
+
+    # Now the paths are scaled, we can chop up our original image
+    segments = []
+    for index in range(len(desired_paths)):
+        last_path = np.zeros(len(desired_paths[index])).astype(int)
+        if index > 0:        
+            last_path = desired_paths[index-1]
+        
+        segment_offset = np.min(last_path)
+        segment_width = np.max(desired_paths[index]).astype(int) - segment_offset
+        segment_image = np.ones((len(desired_paths[index]), segment_width))
+
+        for y_index in range(len(desired_paths[index])):
+            segment_start = last_path[y_index]-segment_offset
+            segment_end = max(desired_paths[index][y_index]-segment_offset, segment_start)
+            segment_image[y_index, segment_start:segment_end] = image[y_index, last_path[y_index]:desired_paths[index][y_index]]
+        
+        segments.append(segment_image)
+    return segments
+           
 
                    
 
@@ -334,14 +424,20 @@ def main():
 
 if __name__ == "__main__":
     handler = ImageHandler("line-images")
-    for i in range(5):
+    handler.image_delivery_mode = DeliveryMode.IN_ORDER
+    for i in range(50):
+        print(i)
         image = handler.get_new_image()
         image = preprocessor.preprocess_img(image)
+      
         #image = preprocessor.resize_img(image, resize_factor=0.5)
         image = preprocessor.remove_inperfections(image)
         image = preprocessor.otsu_thresholding(image)
+        #image = preprocessor.hough_transform_rotation(image)
+        image = deslant_img(image).img 
 
-        dp_segment_by_whitespace(image, verbosity=4)
+        segments = dp_segment_by_whitespace(image, verbosity=3)
+        
 
     #handler.show_image(image)
 
