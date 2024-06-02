@@ -21,17 +21,23 @@ class ImageHandler():
         self.filepath = base_directory
         self.current_index = 0
         self.image_delivery_mode = DeliveryMode.RANDOM
+        self.mode = "debug"
     
     def get_new_image(self):
         image_names = os.listdir(self.filepath) 
         if self.image_delivery_mode == DeliveryMode.IN_ORDER:
            image = cv2.imread(f"{self.filepath}/{image_names[self.current_index]}")
+           if self.mode == "debug":
+               print(f"image filename: {image_names[self.current_index]}")
            self.current_index += 1
            self.current_index %= len(image_names)
            return image
         elif self.image_delivery_mode == DeliveryMode.RANDOM:
             retreval_index = random.randint(0, len(image_names)-1)
             image = cv2.imread(f"{self.filepath}/{image_names[retreval_index]}")
+
+            if self.mode == "debug":
+                print(f"image filename: {image_names[retreval_index]}")
             return image
     
     def show_image(self, image: np.ndarray):
