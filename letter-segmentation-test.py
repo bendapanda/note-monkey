@@ -409,6 +409,17 @@ def create_clear_cuts(image: np.ndarray, cutoff_factor = 1) -> list[tuple[int, i
 
     return result
 
+def segment_connected_text(image:np.ndarray, verbosity=0):
+    """function that segments connected text
+    In implementation I think this functionality shoudl be implemented by a
+    seperate class, since the operations are so different"""
+
+    #https://www.researchgate.net/publication/334239408_An_Efficient_Character_Segmentation_Algorithm_for_Connected_Handwritten_Documents
+    
+    # First, we need to try and construct a graph of the vertical pixel count at each point
+    counts = np.sum(image, axis=1)
+    print(counts)
+
 
 
 
@@ -437,6 +448,8 @@ if __name__ == "__main__":
         image = deslant_img(image).img 
 
         segments = dp_segment_by_whitespace(image, verbosity=3)
+        for segment_image in segments:
+            segment_connected_text(segment, verbosity=3)
         
 
     #handler.show_image(image)
