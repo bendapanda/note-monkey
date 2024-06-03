@@ -1,6 +1,7 @@
 .venv
 .venv/*
 detection-dataset
+lines-dataset
 __pycache__
 
 *.png

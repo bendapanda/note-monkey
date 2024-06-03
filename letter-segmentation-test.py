@@ -143,7 +143,7 @@ def dp_segment_by_whitespace(image: np.ndarray, verbosity:int=0) -> list[np.ndar
         for i in range(len(np.unique(labels))):
             colours.append((random.randint(0, 255),random.randint(0, 255),random.randint(0, 255)))
         
-        visualised_image = scaled_down_image.copy()
+        visualised_image = (scaled_down_image.copy() * 255).astype(np.uint8)
         visualised_image = cv2.cvtColor(visualised_image, cv2.COLOR_GRAY2BGR)
         for start_index in range(len(paths)):
             path = paths[start_index]
@@ -210,7 +210,8 @@ def dp_segment_by_whitespace(image: np.ndarray, verbosity:int=0) -> list[np.ndar
 
     # I need to know what these upscaled paths look like in the context of the original image
     if verbosity >= 4:
-        visualised_image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+        visualised_image = image * 255
+        visualised_image = cv2.cvtColor(visualised_image, cv2.COLOR_GRAY2BGR)
         for i in range(len(desired_paths)):
             for y_index in range(visualised_image.shape[0]):
                 if desired_paths[i][y_index] < visualised_image.shape[1] -1 :
@@ -412,13 +413,105 @@ def create_clear_cuts(image: np.ndarray, cutoff_factor = 1) -> list[tuple[int, i
 def segment_connected_text(image:np.ndarray, verbosity=0):
     """function that segments connected text
     In implementation I think this functionality shoudl be implemented by a
-    seperate class, since the operations are so different"""
-
+    seperate class, since the operations are so different
+    
+    input image should be binarised
+    """
+    #TODO: For this paper to work, we need to be able to thin/enlarge text to be at a constant level!
+    # either that or find a threshold based on the graph of the text
     #https://www.researchgate.net/publication/334239408_An_Efficient_Character_Segmentation_Algorithm_for_Connected_Handwritten_Documents
     
     # First, we need to try and construct a graph of the vertical pixel count at each point
-    counts = np.sum(image, axis=1)
-    print(counts)
+    counts = np.zeros(image.shape[1])
+    for col_index in range(image.shape[1]):
+        counts[col_index] = len(image[:, col_index]) - np.sum(image[:, col_index])
+    
+    #from my dataset, this value seems around 20
+    BINARISATION_THRESHOLD = 30
+    binarised = counts > BINARISATION_THRESHOLD
+
+
+    # now to start the process of finding outliers
+    # first, find the peak spans
+    peak_spans = []
+    on_peak = False
+    start_index = 0
+    for index in range(len(binarised)):
+        if not on_peak and binarised[index] == 1:
+            on_peak = True
+            start_index = index
+        if on_peak and binarised[index] == 0:
+            on_peak = False
+            peak_spans.append((start_index, index))
+    if on_peak:
+        peak_spans.append((start_index, len(binarised)-1))
+
+    peak_widths = np.array([p[1]-p[0] for p in peak_spans])
+    avg_width = np.average(peak_widths)
+
+    # TODO a lot of hyperparameter optimisation will be needed here in order to get something that works well
+    SMALL_PEAK_CONST = 0.7
+    small_peak_flags = [w >= avg_width*SMALL_PEAK_CONST for w in peak_widths]
+    
+    new_peaks = []
+    # now merge small peaks into the larger peaks
+    index = 0
+    while index < len(peak_spans):
+        #if we need to deal with the peak
+        if small_peak_flags[index] == False:
+            # if there is a merge to the right then take it!
+            if index + 1 < len(peak_spans) and small_peak_flags[index+1] == False:
+                small_peak_flags.pop(index+1)
+                small_peak_flags[index] = 1
+                left = peak_spans.pop(index)[0]
+                peak_spans[index] = (left, peak_spans[index][1])
+                # we now don't want to change the index
+            else:
+                #otherwise, we look to the left and right for the closest merge
+                left_dist = np.inf
+                if index > 0:
+                    left_dist = peak_spans[index][0] - peak_spans[index-1][1]
+                right_dist = np.inf
+                if index < len(peak_spans) - 1:
+                    right_dist = peak_spans[index+1][0] - peak_spans[index][1]
+
+                if left_dist == min(left_dist, right_dist):
+                    #merge left
+                    right_bound = peak_spans[index][1]
+                    small_peak_flags.pop(index)
+                    peak_spans.pop(index)
+                    peak_spans[index-1] = (peak_spans[index-1][0], right_bound)
+                else:
+                    # merge right
+                    left_bound = peak_spans[index][0]
+                    small_peak_flags.pop(index)
+                    peak_spans.pop(index)
+                    peak_spans[index] = (left_bound, peak_spans[index][1])
+        else:
+            index += 1
+    print(small_peak_flags)
+
+    if verbosity >= 3:
+        indexes = np.arange(len(counts))
+        # plot original graph
+        plt.plot(indexes, counts, linestyle='-', color="blue")
+        # plot graph after binarisation
+        plt.plot(indexes, binarised*np.max(counts)*0.75, linestyle="-", color="green")
+        # plot graph after small peak clean-up
+        # first we need to generate a new graph lol
+        cleaned_up = np.zeros(len(counts))
+        for peak in peak_spans:
+            for i in range(len(cleaned_up)):
+                if peak[0] <= i and i < peak[1]:
+                    cleaned_up[i] = 1
+        plt.plot(indexes, cleaned_up*np.max(counts)*0.9, color="orange")
+        plt.show()
+        
+    # lastly, if the segmentation intersects the text more than once we disgard?
+    # I think this has promise, but requres a lot more work to be functional. We should calculate the averages
+    # Based on the line as a whole to get a better idea of where we sit
+            
+
 
 
 
@@ -443,13 +536,14 @@ if __name__ == "__main__":
       
         #image = preprocessor.resize_img(image, resize_factor=0.5)
         image = preprocessor.remove_inperfections(image)
-        image = preprocessor.otsu_thresholding(image)
         #image = preprocessor.hough_transform_rotation(image)
         image = deslant_img(image).img 
+        image = preprocessor.otsu_thresholding(image)/255
 
         segments = dp_segment_by_whitespace(image, verbosity=3)
         for segment_image in segments:
-            segment_connected_text(segment, verbosity=3)
+            segment_image = preprocessor.crop_image_tight(segment_image)
+            segment_connected_text(segment_image, verbosity=3)
         
 
     #handler.show_image(image)

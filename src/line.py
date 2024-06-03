@@ -12,7 +12,7 @@ Date: 2024-02-24
 import numpy as np
 import cv2
 from collections import deque
-import src.preprocessor as preprocessor
+import preprocessor
 from sklearn.neighbors import KernelDensity
 from scipy.signal import argrelextrema
 
