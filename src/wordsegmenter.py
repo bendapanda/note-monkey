@@ -1,4 +1,3 @@
-from line import Line
 import preprocessor
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,7 +12,7 @@ class WordChunkSegmenter():
     Class that is responsible for taking lines and segmenting them into cleanly seperable sections
     (seperating non-connected text)
     """
-    def dp_segment_by_whitespace(image: np.ndarray, verbosity:int=0) -> list[np.ndarray]:
+    def segment(self, image: np.ndarray, verbosity:int=0) -> list[np.ndarray]:
         """First goes through every pixel in the top row and attempts to find the shortest
         path to the bottom row that does not touch a black pixel.
         
@@ -22,10 +21,10 @@ class WordChunkSegmenter():
 
         # first, resize the image, and crop it tightly
         image = preprocessor.crop_image_tight(image)
-        scaled_down_image = preprocessor.resize_img(image, resize_factor=1)
+        scaled_down_image = preprocessor.resize_img(image, resize_factor=0.25)
 
         # Perform dp
-        next_step = WordChunkSegmenter._perform_dp(scaled_down_image)
+        next_step = self._perform_dp(scaled_down_image)
         # Now, we need to construct the paths through the image
         paths = []
         for x_index in range(next_step.shape[1]):
@@ -39,7 +38,7 @@ class WordChunkSegmenter():
         
         paths = np.array(paths)
         # Now, we need to take these paths, and seperate them into clusters.
-        labels = WordChunkSegmenter._dbscan_path_clustering(paths, scaled_down_image.shape[1])
+        labels = self._dbscan_path_clustering(paths, scaled_down_image.shape[1])
 
         # for each cluster, find the median line
         clusters = {label: [] for label in labels}
@@ -87,7 +86,7 @@ class WordChunkSegmenter():
         # we crop tight, so in theory, the outsides contain tokens too
         # we also scaled down the image, so we need to work in percentages back in the original image
 
-        desired_paths = WordChunkSegmenter._scale_paths(image, scaled_down_image, median_lines, verbosity=verbosity)
+        desired_paths = self._scale_paths(image, scaled_down_image, median_lines, verbosity=verbosity)
 
 
         # Now the paths are scaled, we can chop up our original image
@@ -111,7 +110,7 @@ class WordChunkSegmenter():
            
 
                    
-    def _perform_dp(image:np.ndarray) -> np.ndarray:
+    def _perform_dp(self, image:np.ndarray) -> np.ndarray:
         """Performs DP on the image, and then returns the next_step array"""
         cache = np.array([[0 for j in range(image.shape[1])] for i in range(image.shape[0])]).astype(np.float32)
         next_step = cache.copy().astype(int)
@@ -155,7 +154,7 @@ class WordChunkSegmenter():
                         next_step[y_index, x_index] = x_index + 1
         return next_step
 
-    def _scale_paths(scaled_image: np.ndarray, image: np.ndarray,
+    def _scale_paths(self, scaled_image: np.ndarray, image: np.ndarray,
                       median_lines: list[np.ndarray], verbosity:int=0) -> np.ndarray:
         # start by scaling the paths in the x-axis
         scaled_paths_x = []
@@ -216,7 +215,7 @@ class WordChunkSegmenter():
 
 
 
-    def _dbscan_path_clustering(paths:np.array, img_width, eps=0.075, min_samples=3):
+    def _dbscan_path_clustering(self, paths:np.array, img_width, eps=0.075, min_samples=3):
         """Clustering algorithm called by dp segment by whitespace
         Given the set of paths, seperates them into clusters and returns the different groups."""
         #TODO hyperparameter adjustment
@@ -231,12 +230,12 @@ class WordChunkSegmenter():
 
 if __name__ == "__main__":
     handler = ImageHandler("lines-dataset/a01/a01-020x")
-    for i in range(20):
-        image = handler.get_new_image()
-        image = preprocessor.preprocess_img(image)
-      
-        #image = preprocessor.resize_img(image, resize_factor=0.5)
-        image = preprocessor.remove_inperfections(image)
-        #image = preprocessor.hough_transform_rotation(image)
-        image = preprocessor.otsu_thresholding(image)/255
-        WordChunkSegmenter.dp_segment_by_whitespace(image, verbosity=3)
+    
+    image = handler.get_new_image()
+    image = preprocessor.preprocess_img(image)
+    
+    #image = preprocessor.resize_img(image, resize_factor=0.5)
+    image = preprocessor.remove_inperfections(image)
+    #image = preprocessor.hough_transform_rotation(image)
+    image = preprocessor.otsu_thresholding(image)/255
+    WordChunkSegmenter.dp_segment_by_whitespace(image, verbosity=3)

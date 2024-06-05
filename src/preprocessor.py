@@ -14,12 +14,28 @@ def preprocess_img(img):
     preprocessing with the following steps:
         converting to grayscale
         binarizing
-        thinning?
     """
     grayscale_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    th, binarized_img = cv2.threshold(
-        grayscale_img, 128, 255, cv2.THRESH_BINARY)
+    binarized_img = otsu_thresholding(grayscale_img)
     return binarized_img
+
+def dialate_by_pixel_density(image: np.ndarray, max_iterations = 5):
+    """I want to be able to dialate images more on rows where they have a higher pixel density
+    Takes in a preprocessed, inverted image
+    """
+    dialated_image = image.copy()
+    # first, get pixel counts
+    row_counts = np.sum(image, axis=1)
+    row_counts = row_counts / np.max(row_counts)
+
+    # now dialate each row proportionally
+    kernel = np.ones((1,5), np.uint8)
+    for index in range(image.shape[0]):
+        row = dialated_image[index:index+1]
+        dialeted_row = cv2.dilate(row, kernel, iterations=int(max_iterations*row_counts[index]))
+        dialated_image[index:index+1] = dialeted_row
+    return dialated_image
+
 
 def thin_text(img):
     """
