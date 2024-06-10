@@ -561,4 +561,6 @@ if __name__ == "__main__":
     for filename in os.listdir("detection-dataset"):
         image = cv2.imread("detection-dataset/" + filename)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        segment(image, verbosity=3)
+        lines = segment(image, verbosity=3)
+        for line in lines:
+            cv2.imshow("line image", line.segment_image())

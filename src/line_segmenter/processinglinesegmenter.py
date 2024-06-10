@@ -11,28 +11,32 @@ Date: 2024-02-24
 
 import numpy as np
 import cv2
-from collections import deque
-import preprocessor
-from sklearn.neighbors import KernelDensity
-from scipy.signal import argrelextrema
-from imagehandler import ImageHandler, DeliveryMode
-from sklearn.cluster import DBSCAN
 import random
-from line import Line
-from copy import deepcopy
-from wordsegmenter import WordChunkSegmenter
 import matplotlib.pyplot as plt
 
+from collections import deque
+from sklearn.neighbors import KernelDensity
+from scipy.signal import argrelextrema
+from sklearn.cluster import DBSCAN
+from copy import deepcopy
+
+from line import Line
+from word_segmenter.wordsegmenter import WordSegmenter
+from line_segmenter.linesegmenter import LineSegmenter
+import preprocessor
                      
 
 
 
 
-class LineSegmenter():
+class ProcessingLineSegmenter(LineSegmenter):
     """class that handles the segmentation
     of an image into lines"""
 
-    chunk_percentage = 0.2
+    def __init__(self, word_segmenter: WordSegmenter):
+        super().__init__(word_segmenter)
+        self.chunk_percentage = 0.2
+    
 
     def segment(self, image: np.ndarray, verbosity=0) -> list[Line]:
         """segments an image and returns line objects
@@ -228,7 +232,7 @@ class LineSegmenter():
         """creates a list of word labels"""
         lines = []
         for component in components:
-            lines.append(Line(image, component, chunk_width, WordChunkSegmenter()))
+            lines.append(Line(image, component, chunk_width, self.word_segmenter))
         return lines
 
     def _traverse_graph(self, graph):
@@ -518,117 +522,21 @@ class LineSegmenter():
             if len(locations) > 1:
                 classified_chunks = self._assign_chunks_to_line(line, locations)
     
-    def segment_by_dp(self, image:np.ndarray, verbosity:int=0) -> list[np.ndarray]:
-        """Trying to apply segmentation to the image in the same way as in wordsegmenter.py"""
-
-        # preprocessing step:
-        # I want to reduce the image in size, and dialate the lines
-    
-        kernel = np.ones((1, 5), np.uint8)
-        inverted_image = cv2.bitwise_not(image)
-        
-        # I also want to be able to resize the image in either axis
-        X_SCALE_NUMBER = 256
-        Y_SCALE_FACTOR = 4
-        resized = cv2.resize(inverted_image, (int(image.shape[0]/Y_SCALE_FACTOR), min(X_SCALE_NUMBER, inverted_image.shape[1])))
-        dialated = preprocessor.dialate_by_pixel_density(resized, max_iterations=20)
-
-        if verbosity >= 3:
-            cv2.imshow("original", preprocessor.resize_img(image))
-
-            cv2.imshow("dialated",dialated)
-            cv2.waitKey(0)
-
-        # Now, run the DP algorithm
-        #TODO hyperparameter optimisation
-        DIAGONAL_PENALTY = 5
-        RIGHT_PENALTY = 0
-        CROSSOVER_PENALTY = 20
-        
-        cache = np.array([[0 for j in range(dialated.shape[0])] for i in range(dialated.shape[1])]).astype(np.float32)
-        next_step = cache.copy().astype(int)
-        # Now, we need to go bottom up and determine the cost to reach bottom from the nodes.
-        for x_index in range(cache.shape[0]-2, -1, -1):
-            for y_index in range(cache.shape[1]):
-                # we have 3 options: down, leftdown, rightdown
-                # if we are at an edge, set the cost to be infinity
-                if dialated[y_index, x_index] == 255:
-                    score = CROSSOVER_PENALTY
-                else:
-                    score = 0
-                
-                right_score = score + RIGHT_PENALTY + cache[x_index+1, y_index]
-
-                if y_index > 0:
-                    up_score = score + DIAGONAL_PENALTY + cache[x_index+1, y_index-1]
-                else:
-                    up_score = np.inf
-                
-                if y_index < cache.shape[1]-1:
-                    down_score = score + DIAGONAL_PENALTY + cache[x_index+1, y_index+1]
-                else:
-                    down_score = np.inf
-                
-                total_score = min(right_score, up_score, down_score)
-                cache[x_index, y_index] = total_score
-                if total_score == right_score:
-                    next_step[x_index, y_index] = y_index
-                elif total_score == up_score:
-                    next_step[x_index, y_index] = y_index - 1
-                else:
-                    next_step[x_index, y_index] = y_index + 1
-                
-        # Now, we need to construct the paths through the image
-        paths = []
-        for y_index in range(next_step.shape[1]):
-            path = []
-            current_index = y_index
-            if next_step[0, current_index] != -1:
-                for x_index in range(next_step.shape[0]):
-                    path.append(current_index)
-                    current_index = next_step[x_index, current_index]
-                paths.append(np.array(path))
-        
-        
-        paths = np.array(paths)
-        # now, we apply the DBSCAN algorithm
-        normalised_paths = paths / dialated.shape[0]
-        MIN_SAMPLES = 3
-        EPS = 0.5
-        
-        cluster_maker = DBSCAN(eps=EPS, min_samples=MIN_SAMPLES).fit(normalised_paths)
-        labels = cluster_maker.labels_
-
-        colours = []
-        for i in range(len(np.unique(labels))):
-            colours.append((random.randint(0, 255),random.randint(0, 255),random.randint(0, 255)))
-
-        if verbosity >= 2:
-
-            visualised_image = (dialated.copy()).astype(np.uint8)
-            visualised_image = cv2.cvtColor(visualised_image, cv2.COLOR_GRAY2BGR)
-            for start_index in range(len(paths)):
-                path = paths[start_index]
-                if path is not None and labels[start_index]:
-                    for x_value in range(visualised_image.shape[1]):
-                        visualised_image[path[x_value], x_value] = colours[labels[start_index]]
-            cv2.imshow("paths", visualised_image)
-            cv2.waitKey(0)
-
 
 if __name__ == "__main__":
-    handler = ImageHandler("detection-dataset")
-    s=LineSegmenter()
-    handler.image_delivery_mode = DeliveryMode.RANDOM
-    for i in range(20):
-        image = handler.get_new_image()
-        handler.show_image(preprocessor.resize_img(image))
-        lines = s.segment(image, verbosity=0)
-        for line in lines:
-            handler.show_image(preprocessor.resize_img(line.line_img))
-            for chunk in line.chunks:
-                handler.show_image(preprocessor.resize_img(chunk))
+    # handler = ImageHandler("detection-dataset")
+    # s=ProcessingLineSegmenter(DPWordChunkSegmenter())
+    # handler.image_delivery_mode = DeliveryMode.RANDOM
+    # for i in range(20):
+    #     image = handler.get_new_image()
+    #     handler.show_image(preprocessor.resize_img(image))
+    #     lines = s.segment(image, verbosity=0)
+    #     for line in lines:
+    #         handler.show_image(preprocessor.resize_img(line.line_img))
+    #         for chunk in line.chunks:
+    #             handler.show_image(preprocessor.resize_img(chunk))
 
     # lines = s.segment(image)
-    # for line in lines:
+    # for line in lines:z
     #     line.show(resize_factor=1)
+    pass

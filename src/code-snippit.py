@@ -1,6 +1,6 @@
 import numpy as np
-from linesegmenter import LineSegmenter, Line
-
+from line_segmenter.linesegmenter import LineSegmenter
+from line_segmenter.processinglinesegmenter import ProcessingLineSegmenter
 class CodeSnippit():
     """Class that converts an image into code"""
 
@@ -11,3 +11,7 @@ class CodeSnippit():
         self.debug_level = debug_level
 
         self.lines = self.segmenter.segment(self.raw_image, self.debug_level)
+
+
+if __name__ == "__main__":
+    

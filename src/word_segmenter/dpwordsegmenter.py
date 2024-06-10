@@ -1,13 +1,14 @@
 import preprocessor
 import numpy as np
-import matplotlib.pyplot as plt
 import random
 import cv2
 from sklearn.cluster import DBSCAN
-from imagehandler import ImageHandler
+
+from imagehandler import ImageHandler 
+from word_segmenter.wordsegmenter import WordSegmenter
 
 
-class WordChunkSegmenter():
+class DPWordChunkSegmenter(WordSegmenter):
     """
     Class that is responsible for taking lines and segmenting them into cleanly seperable sections
     (seperating non-connected text)
@@ -238,4 +239,5 @@ if __name__ == "__main__":
     image = preprocessor.remove_inperfections(image)
     #image = preprocessor.hough_transform_rotation(image)
     image = preprocessor.otsu_thresholding(image)/255
-    WordChunkSegmenter.dp_segment_by_whitespace(image, verbosity=3)
+    segmenter = DPWordChunkSegmenter()
+    segmenter.segment(image)

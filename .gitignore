@@ -1,5 +1,6 @@
 .venv
 .venv/*
+.vscode
 detection-dataset
 lines-dataset
 __pycache__
