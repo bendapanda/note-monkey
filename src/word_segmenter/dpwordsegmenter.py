@@ -1,4 +1,4 @@
-import preprocessor
+import preprocessor as preprocessor
 import numpy as np
 import random
 import cv2
@@ -6,6 +6,8 @@ from sklearn.cluster import DBSCAN
 
 from imagehandler import ImageHandler 
 from word_segmenter.wordsegmenter import WordSegmenter
+from model.basemodel import BaseModel
+from wordchunk import Chunk
 
 
 class DPWordChunkSegmenter(WordSegmenter):
@@ -13,6 +15,9 @@ class DPWordChunkSegmenter(WordSegmenter):
     Class that is responsible for taking lines and segmenting them into cleanly seperable sections
     (seperating non-connected text)
     """
+    def __init__(self, model: BaseModel):
+        super().__init__(model)
+
     def segment(self, image: np.ndarray, verbosity:int=0) -> list[np.ndarray]:
         """First goes through every pixel in the top row and attempts to find the shortest
         path to the bottom row that does not touch a black pixel.
@@ -22,6 +27,8 @@ class DPWordChunkSegmenter(WordSegmenter):
 
         # first, resize the image, and crop it tightly
         image = preprocessor.crop_image_tight(image)
+        if image.shape == (1, 0):
+            return []
         scaled_down_image = preprocessor.resize_img(image, resize_factor=0.25)
 
         # Perform dp
@@ -92,21 +99,27 @@ class DPWordChunkSegmenter(WordSegmenter):
 
         # Now the paths are scaled, we can chop up our original image
         segments = []
-        for index in range(len(desired_paths)):
-            last_path = np.zeros(len(desired_paths[index])).astype(int)
+        for index in range(len(desired_paths)+1):
+            last_path = np.zeros(image.shape[0]).astype(int)
+            if index < len(desired_paths):
+                current_path = desired_paths[index]
+            else:
+                current_path = (np.ones(image.shape[0])*image.shape[1]).astype(int)
             if index > 0:        
                 last_path = desired_paths[index-1]
             
             segment_offset = np.min(last_path)
-            segment_width = np.max(desired_paths[index]).astype(int) - segment_offset
-            segment_image = np.ones((len(desired_paths[index]), segment_width))
+            segment_width = np.max(current_path).astype(int) - segment_offset
+            segment_image = np.ones((len(current_path), segment_width))*255
 
-            for y_index in range(len(desired_paths[index])):
+            for y_index in range(len(current_path)):
                 segment_start = last_path[y_index]-segment_offset
-                segment_end = max(desired_paths[index][y_index]-segment_offset, segment_start)
-                segment_image[y_index, segment_start:segment_end] = image[y_index, last_path[y_index]:desired_paths[index][y_index]]
+                segment_end = max(current_path[y_index]-segment_offset, segment_start)
+                print(last_path[y_index], current_path[index])
+                segment_image[y_index, segment_start:segment_end] = image[y_index, last_path[y_index]:current_path[y_index]]
+
             
-            segments.append(segment_image)
+            segments.append(Chunk(segment_image, self.model))
         return segments
            
 
@@ -225,6 +238,8 @@ class DPWordChunkSegmenter(WordSegmenter):
         normalised_paths = paths / img_width
         min_value = 0
         
+        if len(normalised_paths) <= 0:
+            return []
         cluster_maker = DBSCAN(eps=eps, min_samples=min_samples).fit(normalised_paths)
         return cluster_maker.labels_
     

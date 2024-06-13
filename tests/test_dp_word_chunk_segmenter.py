@@ -3,8 +3,7 @@ import pytest
 from src.word_segmenter.dpwordsegmenter import DPWordChunkSegmenter
 
 class TestDPWordChunkSegmenter():
-    def __init__(self):
-        self.segmenter = DPWordChunkSegmenter() 
+    segmenter = DPWordChunkSegmenter() 
     
     def test_on_1by1(self):
         """we expect to get no characters here"""

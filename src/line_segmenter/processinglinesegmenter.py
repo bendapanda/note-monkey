@@ -41,7 +41,8 @@ class ProcessingLineSegmenter(LineSegmenter):
     def segment(self, image: np.ndarray, verbosity=0) -> list[Line]:
         """segments an image and returns line objects
         
-        Broadly follows the following steps:
+        Broadly follows the focv2.imshow('image', self.original_image)
+        cv2.waitKey(0)llowing steps:
         1. split the image into columns of chunk percentage
         2. assign each row of those columns either black or white
         3. process those columns to clean up inperfections
@@ -311,7 +312,7 @@ class ProcessingLineSegmenter(LineSegmenter):
                 isolated_left = True
                 if column_index > 0:
                     for other_box in boxes[column_index-1]:
-                        if self._touching(other_box, boxes[column_index][box_index]):
+                        if self._touching((column_index-1,)+other_box, (column_index,)+boxes[column_index][box_index]):
                             isolated_left = False
                 else:
                     isolated_left = False
@@ -319,7 +320,7 @@ class ProcessingLineSegmenter(LineSegmenter):
                 isolated_right = True
                 if column_index < len(boxes) - 1:
                     for other_box in boxes[column_index+1]:
-                        if self._touching(other_box, boxes[column_index][box_index]):
+                        if self._touching((column_index+1,)+other_box, (column_index,)+boxes[column_index][box_index]):
                             isolated_right  = False
                 else:
                     isolated_right = False
@@ -358,7 +359,7 @@ class ProcessingLineSegmenter(LineSegmenter):
                 left_box_to_connect = None
                 while not connection_made and left_index < len(left_rows_to_check):
                     for other_box in left_rows_to_check[left_index]:
-                        if self._touching(other_box, boxes[column_index][box_index]):
+                        if self._touching((left_index,)+other_box, (box_index,) + boxes[column_index][box_index]):
                             connection_made = True
                             left_box_to_connect = (column_index-left_index-1, other_box[0], other_box[1])
                     left_index += 1
@@ -368,7 +369,7 @@ class ProcessingLineSegmenter(LineSegmenter):
                 right_box_to_connect = None
                 while not connection_made and right_index < len(right_rows_to_check):
                     for other_box in right_rows_to_check[right_index]:
-                        if self._touching(other_box, boxes[column_index][box_index]):
+                        if self._touching((right_index,)+other_box, (box_index,)+boxes[column_index][box_index]):
                             
                             connection_made = True
                             right_box_to_connect = (column_index+right_index+1, other_box[0], other_box[1])
@@ -393,6 +394,7 @@ class ProcessingLineSegmenter(LineSegmenter):
     def _fill_horizontal_cavities(self, columns):
         """takes in a list of columns, and fills in any horizontal overhangs"""
         #First, fill cavities:
+        #basically we are looking for 2 vertically stacked boxes that are both touching the same adjacent box
         new_columns = deepcopy(columns)
         old_columns = [np.zeros_like(new_columns[i] for i in range(len(new_columns)))]
         while any(np.any(new_columns[i] != old_columns[i]) for i in range(len(new_columns))):
@@ -416,7 +418,7 @@ class ProcessingLineSegmenter(LineSegmenter):
 
                     boxes_connected = False
                     for other_box in boxes_to_consider:
-                        if self._touching(other_box, top_box) and self._touching(other_box, bottom_box):
+                        if self._touching((i-1,)+ other_box, (i,)+top_box) and self._touching((i-1,) +other_box, (i,)+bottom_box):
                             boxes_connected = True
                     
                     if boxes_connected:
@@ -473,6 +475,7 @@ class ProcessingLineSegmenter(LineSegmenter):
         return results
 
     def _touching(self, box1, box2):
+        print(box1, box2)
         """takes in (lane, y1, y2) tuples, returns true if they are touching"""
         return abs(box1[0]-box2[0]) == 1 and\
             ((box1[1] <= box2[1] and box1[2] >= box2[1]) or

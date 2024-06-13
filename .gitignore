@@ -4,6 +4,7 @@
 detection-dataset
 lines-dataset
 __pycache__
+models
 
 *.png
 *.jpg

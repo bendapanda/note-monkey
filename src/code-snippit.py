@@ -12,6 +12,3 @@ class CodeSnippit():
 
         self.lines = self.segmenter.segment(self.raw_image, self.debug_level)
 
-
-if __name__ == "__main__":
-    

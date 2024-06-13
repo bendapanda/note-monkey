@@ -104,23 +104,26 @@ def blur_image(img, size=(5, 5)):
 def crop_image_tight(image):
     """Intended for use with a binarised image
     crops to closest fit containing only black pixels"""
-    top_dist = 0
-    while np.all(image[top_dist] == 255):
-        top_dist += 1
-    
-    bottom_dist = image.shape[0]
-    while np.all(image[bottom_dist-1] == 255):
-        bottom_dist -= 1
-    
-    left_dist = 0
-    while np.all(image[:, left_dist] == 255):
-        left_dist += 1
-    
-    right_dist = image.shape[1]
-    while np.all(image[:, right_dist-1] == 255):
-        right_dist -= 1
-
-    return image[top_dist:bottom_dist-1, left_dist:right_dist-1]
+    white_value = np.max(np.unique(image))
+    if not np.all(image == white_value):
+        top_dist = 0
+        while np.all(image[top_dist] == white_value):
+            top_dist += 1
+        
+        bottom_dist = image.shape[0]
+        while np.all(image[bottom_dist-1] == white_value):
+            bottom_dist -= 1
+        
+        left_dist = 0
+        while np.all(image[:, left_dist] == white_value):
+            left_dist += 1
+        
+        right_dist = image.shape[1]
+        while np.all(image[:, right_dist-1] == white_value):
+            right_dist -= 1
+        return image[top_dist:bottom_dist-1, left_dist:right_dist-1]
+    else:
+        return np.array([[]])
 
 def remove_inperfections(image: np.ndarray) -> np.ndarray:
     """Takes an image as inputs and tries to smooth out small imperfections caused by pen strokes, etc"""
