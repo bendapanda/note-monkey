@@ -27,7 +27,8 @@ class TestDPWordChunkSegmenter():
         assert len(output) == 1 and output[0] == input
         
     def test_on_none(self):
-        pass
+       input = None
+       output = self.segmenter.segment(input) 
 
     def test_on_one_component(self):
         pass
