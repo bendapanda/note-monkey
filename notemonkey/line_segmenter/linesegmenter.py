@@ -1,8 +1,8 @@
-from word_segmenter.wordsegmenter import WordSegmenter
+from word_segmenter.base_word_segmenter import BaseWordSegmenter
 
 class LineSegmenter():
     
-    def __init__(self, word_segmenter: WordSegmenter):
+    def __init__(self, word_segmenter: BaseWordSegmenter):
         self.word_segmenter = word_segmenter
 
     def segment():

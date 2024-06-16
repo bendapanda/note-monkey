@@ -5,12 +5,12 @@ import cv2
 from sklearn.cluster import DBSCAN
 
 from imagehandler import ImageHandler 
-from word_segmenter.wordsegmenter import WordSegmenter
+from word_segmenter.base_word_segmenter import BaseWordSegmenter
 from model.basemodel import BaseModel
 from wordchunk import Chunk
 
 
-class DPWordChunkSegmenter(WordSegmenter):
+class DPWordChunkSegmenter(BaseWordSegmenter):
     """
     Class that is responsible for taking lines and segmenting them into cleanly seperable sections
     (seperating non-connected text)

@@ -1,7 +1,7 @@
 import os
 import cv2
 import random
-import src.preprocessor as preprocessor
+import notemonkey.preprocessor as preprocessor
 from deslant_img import deslant_img
 import numpy as np
 from segmentation_tests_paper import segment as segment_lines
@@ -10,7 +10,7 @@ from sklearn.neighbors import KernelDensity
 from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
 from copy import deepcopy
-from src.imagehandler import ImageHandler, DeliveryMode
+from notemonkey.imagehandler import ImageHandler, DeliveryMode
 
 
 

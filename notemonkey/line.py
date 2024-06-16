@@ -2,7 +2,7 @@ import preprocessor
 
 import numpy as np
 import cv2
-from word_segmenter.wordsegmenter import WordSegmenter
+from word_segmenter.base_word_segmenter import BaseWordSegmenter
 
 
 class Line():
@@ -11,7 +11,7 @@ class Line():
     
     NOTE: I am not sure if line should be doing all this processing, feels like that should be handled by the segmenter"""
 
-    def __init__(self, image: np.ndarray, pieces: set[tuple], piece_width, segmenter: WordSegmenter):
+    def __init__(self, image: np.ndarray, pieces: set[tuple], piece_width, segmenter: BaseWordSegmenter):
         self.original_image = image
         self.pieces = pieces
         self.piece_width = piece_width

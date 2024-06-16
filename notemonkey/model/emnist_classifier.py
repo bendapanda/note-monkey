@@ -1,16 +1,28 @@
 import numpy as np
 import cv2
+import keras
 from model.basemodel import BaseModel
 import preprocessor
 
 class EMNISTModel(BaseModel):
     def __init__(self, filepath: str, class_mapping_path: str):
-        super().__init__( filepath)
+        self.model = keras.models.load_model(filepath) 
         self.class_mapping = {}
         with open(class_mapping_path) as file:
             for line in file:
                 index, character_code = line.split()
                 self.class_mapping[int(index)] = chr(int(character_code))
+    
+    def predict(self, image: np.ndarray):
+        processed_image = self._preprocess(image)
+        prediction = self.model.predict(np.array([processed_image]))
+        classification = self._postprocess(prediction)
+        
+        verbosity= 2
+        if verbosity >= 4:  
+            cv2.imshow(f"class: {classification}",cv2.resize(processed_image, (100,100)))
+            cv2.waitKey(0)
+        return classification
 
     def _preprocess(self, image):
         #need to convert the image to 24x24 white on black

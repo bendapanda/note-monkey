@@ -3,33 +3,56 @@ import numpy as np
 import cv2
 
 
-def resize_img(img, resize_factor=0.25):
+def resize_img(img: np.ndarray, resize_factor=0.25) -> np.ndarray:
+    
     y, x = img.shape[:2]
-    img = cv2.resize(img, (int(x*resize_factor), int(y*resize_factor)))
+    resized_x = int(x*resize_factor)
+    resized_y = int(y*resize_factor)
+    if resized_x <= 0 or resized_y <= 0:
+        raise ValueError("resize values too small to be handled")
+    img = cv2.resize(img, (resized_x, resized_y))
     return img
 
 
-def preprocess_img(img):
+def preprocess_img(img: np.ndarray):
     """
     preprocessing with the following steps:
         converting to grayscale
         binarizing
     """
-    grayscale_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    if img.shape[-1] == 0:
+        raise ValueError('zero dimensional images cannot be preprocessed')
+        
+    if len(img.shape) == 2:
+        grayscale_img = img.copy()
+    elif len(img.shape) == 3:
+        grayscale_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    else:
+        raise ValueError('image can only be 2 or 3 channel')
+    
+   
     binarized_img = otsu_thresholding(grayscale_img)
     return binarized_img
 
-def dialate_by_pixel_density(image: np.ndarray, max_iterations = 5):
+def dialate_by_pixel_density(image: np.ndarray, max_iterations = 5, kernal_size=5) -> np.ndarray:
     """I want to be able to dialate images more on rows where they have a higher pixel density
-    Takes in a preprocessed, inverted image
     """
+    # first, make sure it is greyscale, else throw a valueerror
+    if len(image.shape) != 2:
+        raise ValueError("input image should be in greyscale")
+    if len(np.unique(image)) > 2:
+        raise ValueError("input image must be binarized")
+    if image.shape[1] < kernal_size: 
+        raise ValueError("image width must be at least as big as the kernal")
     dialated_image = image.copy()
+    dialated_image = np.max(dialated_image) - dialated_image
+    print(dialated_image) 
     # first, get pixel counts
     row_counts = np.sum(image, axis=1)
     row_counts = row_counts / np.max(row_counts)
 
     # now dialate each row proportionally
-    kernel = np.ones((1,5), np.uint8)
+    kernel = np.ones((1,kernal_size), np.uint8)
     for index in range(image.shape[0]):
         row = dialated_image[index:index+1]
         dialeted_row = cv2.dilate(row, kernel, iterations=int(max_iterations*row_counts[index]))
@@ -104,7 +127,13 @@ def blur_image(img, size=(5, 5)):
 def crop_image_tight(image):
     """Intended for use with a binarised image
     crops to closest fit containing only black pixels"""
-    white_value = np.max(np.unique(image))
+    
+    if type(image) != np.ndarray:
+        raise ValueError('cannot crop something which is not an image')
+    if image.shape[0] == 0 or image.shape[1] == 0:
+        return image
+
+    white_value = 1 if 1 in np.unique(image) else 255
     if not np.all(image == white_value):
         top_dist = 0
         while np.all(image[top_dist] == white_value):
@@ -121,7 +150,7 @@ def crop_image_tight(image):
         right_dist = image.shape[1]
         while np.all(image[:, right_dist-1] == white_value):
             right_dist -= 1
-        return image[top_dist:bottom_dist-1, left_dist:right_dist-1]
+        return image[top_dist:bottom_dist, left_dist:right_dist]
     else:
         return np.array([[]])
 

@@ -21,7 +21,7 @@ from sklearn.cluster import DBSCAN
 from copy import deepcopy
 
 from line import Line
-from word_segmenter.wordsegmenter import WordSegmenter
+from word_segmenter.base_word_segmenter import BaseWordSegmenter
 from line_segmenter.linesegmenter import LineSegmenter
 import preprocessor
                      
@@ -33,7 +33,7 @@ class ProcessingLineSegmenter(LineSegmenter):
     """class that handles the segmentation
     of an image into lines"""
 
-    def __init__(self, word_segmenter: WordSegmenter):
+    def __init__(self, word_segmenter: BaseWordSegmenter):
         super().__init__(word_segmenter)
         self.chunk_percentage = 0.2
     
@@ -67,6 +67,7 @@ class ProcessingLineSegmenter(LineSegmenter):
             painted_col = painted_col.astype(np.uint8)
             painted_col = preprocessor.otsu_thresholding(painted_col)
             painted_columns.append(painted_col)
+        painted_columns = np.array(painted_columns)
             
         if verbosity >= 2:
             cv2.imshow("binarized image", preprocessor.resize_img(np.hstack(painted_columns)))
@@ -84,9 +85,6 @@ class ProcessingLineSegmenter(LineSegmenter):
 
         self._dialation_operation(smoothed_columns, verbosity=verbosity)
 
-
-
-
         # We need to process these chunks now
         word_layout = []
         for column in columns:
@@ -103,6 +101,8 @@ class ProcessingLineSegmenter(LineSegmenter):
                     indexes.append((x_start, index))
                     started = False
                 index += 1
+            if started:
+                indexes.append((x_start, len(empty)))
             word_layout += [indexes]
 
         # now that we have processed the chunks we can get all connected components
@@ -261,7 +261,7 @@ class ProcessingLineSegmenter(LineSegmenter):
             state[node] = "P"
         return component, state
 
-    def _dialation_operation(self, columns, connection_distance=2, verbosity=0):
+    def _dialation_operation(self, columns: np.ndarray, connection_distance=2, verbosity=0):
         """when we dialate boxes, we need to do two things:
         First, make sure that horizontal cavities are filled,
         so holes in chunks, or divots in the horizontal direction.
@@ -391,13 +391,13 @@ class ProcessingLineSegmenter(LineSegmenter):
         return new_columns
 
 
-    def _fill_horizontal_cavities(self, columns):
+    def _fill_horizontal_cavities(self, columns:np.ndarray):
         """takes in a list of columns, and fills in any horizontal overhangs"""
         #First, fill cavities:
         #basically we are looking for 2 vertically stacked boxes that are both touching the same adjacent box
         new_columns = deepcopy(columns)
-        old_columns = [np.zeros_like(new_columns[i] for i in range(len(new_columns)))]
-        while any(np.any(new_columns[i] != old_columns[i]) for i in range(len(new_columns))):
+        old_columns = np.zeros_like(new_columns)
+        while np.any(new_columns != old_columns):
             old_columns = new_columns
             new_columns = deepcopy(new_columns)
             # go through each column and find pairs
@@ -430,7 +430,7 @@ class ProcessingLineSegmenter(LineSegmenter):
         """splits an image into verticle columns of
         chunk_percentage"""
         width = image.shape[1]
-        chunk_width = int(width * self.chunk_percentage)
+        chunk_width = max(1, int(width * self.chunk_percentage))
         chunks = []
         index = 0
         while index+chunk_width < width:
@@ -475,7 +475,6 @@ class ProcessingLineSegmenter(LineSegmenter):
         return results
 
     def _touching(self, box1, box2):
-        print(box1, box2)
         """takes in (lane, y1, y2) tuples, returns true if they are touching"""
         return abs(box1[0]-box2[0]) == 1 and\
             ((box1[1] <= box2[1] and box1[2] >= box2[1]) or
@@ -527,19 +526,4 @@ class ProcessingLineSegmenter(LineSegmenter):
     
 
 if __name__ == "__main__":
-    # handler = ImageHandler("detection-dataset")
-    # s=ProcessingLineSegmenter(DPWordChunkSegmenter())
-    # handler.image_delivery_mode = DeliveryMode.RANDOM
-    # for i in range(20):
-    #     image = handler.get_new_image()
-    #     handler.show_image(preprocessor.resize_img(image))
-    #     lines = s.segment(image, verbosity=0)
-    #     for line in lines:
-    #         handler.show_image(preprocessor.resize_img(line.line_img))
-    #         for chunk in line.chunks:
-    #             handler.show_image(preprocessor.resize_img(chunk))
-
-    # lines = s.segment(image)
-    # for line in lines:z
-    #     line.show(resize_factor=1)
-    pass
+   pass 

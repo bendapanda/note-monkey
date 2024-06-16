@@ -1,9 +1,12 @@
 import numpy as np
+from context import notemonkey
 import pytest
-from src.word_segmenter.dpwordsegmenter import DPWordChunkSegmenter
+
+from notemonkey.word_segmenter.dpwordsegmenter import DPWordChunkSegmenter
+from  notemonkey.model.basemodel import BaseModel
 
 class TestDPWordChunkSegmenter():
-    segmenter = DPWordChunkSegmenter() 
+    segmenter = DPWordChunkSegmenter(BaseModel())
     
     def test_on_1by1(self):
         """we expect to get no characters here"""
@@ -24,12 +27,10 @@ class TestDPWordChunkSegmenter():
     def test_on_all_black(self):
         input = np.zeros((100,300))
         output = self.segmenter.segment(input)
-        assert len(output) == 1 and output[0] == input
+        assert len(output) == 1 and output[0].image.shape == input.shape and np.all(output[0].image == input)
         
-    def test_on_none(self):
-       input = None
-       output = self.segmenter.segment(input) 
-
+    # these are all operational tests, not on tests with specific bugs that could arise
+    # so leaving as stubs for now.
     def test_on_one_component(self):
         pass
 

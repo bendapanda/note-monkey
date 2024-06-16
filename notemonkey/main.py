@@ -28,3 +28,4 @@ if __name__ == "__main__":
             output += "\n"
         print(output)
         handler.show_image(preprocessor.resize_img(image))
+    
