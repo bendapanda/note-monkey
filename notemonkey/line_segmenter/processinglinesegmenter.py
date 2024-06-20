@@ -67,7 +67,7 @@ class ProcessingLineSegmenter(LineSegmenter):
             painted_col = painted_col.astype(np.uint8)
             painted_col = preprocessor.otsu_thresholding(painted_col)
             painted_columns.append(painted_col)
-        painted_columns = np.array(painted_columns)
+        
             
         if verbosity >= 2:
             cv2.imshow("binarized image", preprocessor.resize_img(np.hstack(painted_columns)))
@@ -396,8 +396,8 @@ class ProcessingLineSegmenter(LineSegmenter):
         #First, fill cavities:
         #basically we are looking for 2 vertically stacked boxes that are both touching the same adjacent box
         new_columns = deepcopy(columns)
-        old_columns = np.zeros_like(new_columns)
-        while np.any(new_columns != old_columns):
+        old_columns = [np.zeros_like(column) for column in new_columns]
+        while any(np.any(new_columns[i] != old_columns[i]) for i in range(len(new_columns))):
             old_columns = new_columns
             new_columns = deepcopy(new_columns)
             # go through each column and find pairs
