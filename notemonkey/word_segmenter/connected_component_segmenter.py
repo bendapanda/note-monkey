@@ -13,20 +13,25 @@ import preprocessor
 
 class ConnectedComponentWordSegmenter(BaseWordSegmenter):
     
-    def __init__(self, model: BaseModel):
-        super().__init__(model)
+    def __init__(self, model: BaseModel, verbosity:int = 0):
+        super().__init__(model, verbosity=verbosity)
     
-    def segment(self, line_image: np.ndarray, verbosity: int = 0):
+    def segment(self, line_image: np.ndarray):
         """chops a line up into the connected components."""
+
+        # the line images should be coming from a line segementer, so it is safe
+        # to assume they are the correct dimension, however, we need to make sure they are non-trivial
+        if line_image.shape[-1] == 0:
+            return []
 
         #first, binarize the line
         binarized_img = preprocessor.preprocess_img(line_image) 
-        inverted_img = np.max(binarized_img) - binarized_img
+        inverted_img = 255 - binarized_img
 
         # now, get all connected components
         num_labels, labeled_img = cv2.connectedComponents(inverted_img)
 
-        if verbosity >= 2:
+        if self.verbosity >= 3:
             # we want to assign each label a colour.
             # Map component labels to hue val
             image_to_show = labeled_img.copy()
@@ -44,6 +49,10 @@ class ConnectedComponentWordSegmenter(BaseWordSegmenter):
             cv2.waitKey(0)
         
         # now, we need to take those labels, and segment the image based off of them.
+        # it is possible that the entire image is black, off of a line segementation fault,
+        # or a trivial input image, so we must handle the special case where we only have one label
+        if num_labels == 1 and inverted_img[0][0] != 0 :
+            return [[Chunk(line_image, self.model)]]
         segmented_sections = []
         for i in range(1, num_labels):
             image_segment = labeled_img == i
@@ -63,7 +72,7 @@ class ConnectedComponentWordSegmenter(BaseWordSegmenter):
         # and eps being some factor of the median chunk distance This will cause issues, particularly with overly cursive handwriting
         word_segmented = self.split_into_words(segmented_sections)
 
-        if verbosity >= 4:
+        if self.verbosity >= 4:
             for word in word_segmented:
                 for chunk, pixel in word:
                     cv2.imshow(f'{pixel}', chunk.image)
@@ -71,16 +80,16 @@ class ConnectedComponentWordSegmenter(BaseWordSegmenter):
 
         return [[Chunk(section[0], self.model) for section in word] for word in word_segmented]
 
-    def get_first_black_pixel_index(self, image: np.ndarray):
+    def get_first_black_pixel_index(self, image: np.ndarray, y_step:int=1):
         current_index = image.shape[1]
-        for y_index in range(0, image.shape[0], 5):
+        for y_index in range(0, image.shape[0], y_step):
             for x_index in range(image.shape[1]):
                 if image[y_index, x_index] == 0:
                     current_index = min(x_index, current_index)
                     break
         return current_index
     
-    def merge_high_overlap_sections(self, sections, merge_modifier=0.9):
+    def merge_high_overlap_sections(self, sections, merge_modifier=0.1):
         """function that merges sections containing high overlap
         we do this by measuring the percentage that each image overlaps with its neighbours, and if it is high
         enough, then we merge them"""
@@ -106,12 +115,20 @@ class ConnectedComponentWordSegmenter(BaseWordSegmenter):
                                   new_sections[index+1][1]+new_sections[index+1][0].shape[1])
                     new_img_width = new_img_stop - new_img_start
                     
-                    new_img = np.ones((new_sections[index][0].shape[0], new_img_width), np.uint8)*255
-                    print(new_sections[index][0].shape)
+                    new_img = np.ones((new_sections[index][0].shape[0], new_img_width), np.uint8)
                     new_img[:, new_sections[index][1]-new_img_start:\
-                            new_sections[index][1]-new_img_start+new_sections[index][0].shape[1]] = new_sections[index][0]
+                            new_sections[index][1]-new_img_start+new_sections[index][0].shape[1]] &= (new_sections[index][0]).astype(np.uint8)
                     new_img[:, new_sections[index+1][1]-new_img_start:\
-                            new_sections[index+1][1]-new_img_start+new_sections[index+1][0].shape[1]] = new_sections[index+1][0]
+                            new_sections[index+1][1]-new_img_start+new_sections[index+1][0].shape[1]] &= (new_sections[index+1][0]).astype(np.uint8)
+                    new_img *= 255
+
+                    if self.verbosity >= 3:
+                        print('merging high overlap')
+
+                        cv2.imshow('old image', new_sections[index][0])
+                        cv2.imshow('old image 2', new_sections[index+1][0])
+                        cv2.imshow('merged image', new_img)
+                        cv2.waitKey(0)
 
                     new_sections.pop(index+1)
                     new_sections[index] = (new_img, new_img_start)
@@ -123,6 +140,9 @@ class ConnectedComponentWordSegmenter(BaseWordSegmenter):
         """takes in the segmented sections, along with their starting x indexes, 
         and by considering the distances between their finishing points and the next character's starting point,
         decides whether there is likely to be a space""" 
+
+        if len(segmented_sections) == 0:
+            return []
 
         distances_between_characters = []
         for index in range(len(segmented_sections)-1):

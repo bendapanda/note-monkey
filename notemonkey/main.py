@@ -12,10 +12,14 @@ from imagehandler import ImageHandler, DeliveryMode
 import preprocessor
 
 if __name__ == "__main__":
-    line_segmenter = ProcessingLineSegmenter(ConnectedComponentWordSegmenter(EMNISTModel('models/model_v5.keras', 'models/class_mapping.txt')))
+    model = EMNISTModel('models/model_v5.keras', 'models/class_mapping.txt', verbosity=0)
+    #model = BaseModel()
+    word_segmenter = ConnectedComponentWordSegmenter(model, verbosity=0)
+    line_segmenter = ProcessingLineSegmenter(word_segmenter, verbosity=0)
     handler = ImageHandler("./datasets/test")
     handler.image_delivery_mode = DeliveryMode.IN_ORDER
     for i in range(3):
+        image = handler.get_new_image()
         image = handler.get_new_image()
         
         desired_width = 1500

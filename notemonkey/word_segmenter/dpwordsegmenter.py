@@ -15,10 +15,10 @@ class DPWordChunkSegmenter(BaseWordSegmenter):
     Class that is responsible for taking lines and segmenting them into cleanly seperable sections
     (seperating non-connected text)
     """
-    def __init__(self, model: BaseModel):
-        super().__init__(model)
+    def __init__(self, model: BaseModel, verbosity:int = 0):
+        super().__init__(model, verbosity=verbosity)
 
-    def segment(self, image: np.ndarray, verbosity:int=0) -> list[np.ndarray]:
+    def segment(self, image: np.ndarray) -> list[np.ndarray]:
         """First goes through every pixel in the top row and attempts to find the shortest
         path to the bottom row that does not touch a black pixel.
         
@@ -59,7 +59,7 @@ class DPWordChunkSegmenter(BaseWordSegmenter):
             median_lines.append(median_vector.astype(int))
             
         # to test this we need to be able to visualise
-        if verbosity>=3:
+        if self.verbosity>=3:
             # create a random colour per class
             print(f"image shape: {scaled_down_image.shape}")
             print(f"{len(np.unique(labels))} classes found")
@@ -94,7 +94,7 @@ class DPWordChunkSegmenter(BaseWordSegmenter):
         # we crop tight, so in theory, the outsides contain tokens too
         # we also scaled down the image, so we need to work in percentages back in the original image
 
-        desired_paths = self._scale_paths(image, scaled_down_image, median_lines, verbosity=verbosity)
+        desired_paths = self._scale_paths(image, scaled_down_image, median_lines)
 
 
         # Now the paths are scaled, we can chop up our original image
@@ -169,7 +169,7 @@ class DPWordChunkSegmenter(BaseWordSegmenter):
         return next_step
 
     def _scale_paths(self, scaled_image: np.ndarray, image: np.ndarray,
-                      median_lines: list[np.ndarray], verbosity:int=0) -> np.ndarray:
+                      median_lines: list[np.ndarray]) -> np.ndarray:
         # start by scaling the paths in the x-axis
         scaled_paths_x = []
         scaled_width = scaled_image.shape[1]
@@ -210,7 +210,7 @@ class DPWordChunkSegmenter(BaseWordSegmenter):
         scaled_paths = np.array(scaled_paths)
 
         # I need to know what these upscaled paths look like in the context of the original image
-        if verbosity >= 4:
+        if self.verbosity >= 4:
             visualised_image = scaled_image.astype(np.uint8) * 255
             visualised_image = cv2.cvtColor(visualised_image, cv2.COLOR_GRAY2BGR)
             for i in range(len(scaled_paths)):

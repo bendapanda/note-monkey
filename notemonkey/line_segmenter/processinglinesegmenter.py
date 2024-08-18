@@ -1,9 +1,7 @@
-"""Handles line segmentation
+"""Handles line segmentation using a methodology described here:
+need to find the paper hehe
 
-Current to-implement list:
-    - some way of handling the dot on i's
-    - way to detetatch lines intersected by loopy lower letters
-    - way to re-combine overly segmented lines
+overall I am not happy with the methods used here. I need to go back and consider other papers.
 
 Author: Ben Shirley
 Date: 2024-02-24
@@ -11,13 +9,11 @@ Date: 2024-02-24
 
 import numpy as np
 import cv2
-import random
 import matplotlib.pyplot as plt
 
 from collections import deque
 from sklearn.neighbors import KernelDensity
 from scipy.signal import argrelextrema
-from sklearn.cluster import DBSCAN
 from copy import deepcopy
 
 from line import Line
@@ -33,16 +29,15 @@ class ProcessingLineSegmenter(LineSegmenter):
     """class that handles the segmentation
     of an image into lines"""
 
-    def __init__(self, word_segmenter: BaseWordSegmenter):
-        super().__init__(word_segmenter)
+    def __init__(self, word_segmenter: BaseWordSegmenter, verbosity:int = 0 ):
+        super().__init__(word_segmenter, verbosity=verbosity)
         self.chunk_percentage = 0.2
     
 
-    def segment(self, image: np.ndarray, verbosity=0) -> list[Line]:
+    def segment(self, image: np.ndarray) -> list[Line]:
         """segments an image and returns line objects
         
-        Broadly follows the focv2.imshow('image', self.original_image)
-        cv2.waitKey(0)llowing steps:
+        Broadly follows the following steps:
         1. split the image into columns of chunk percentage
         2. assign each row of those columns either black or white
         3. process those columns to clean up inperfections
@@ -53,7 +48,7 @@ class ProcessingLineSegmenter(LineSegmenter):
         proccessed_img = preprocessor.preprocess_img(image)
 
         blurred_img = preprocessor.blur_image(proccessed_img, (100, 20))
-        if verbosity >= 3:
+        if self.verbosity >= 3:
             cv2.imshow("preprocessed image",preprocessor.resize_img(blurred_img))
             cv2.waitKey(0)
             cv2.destroyAllWindows()
@@ -69,21 +64,21 @@ class ProcessingLineSegmenter(LineSegmenter):
             painted_columns.append(painted_col)
         
             
-        if verbosity >= 2:
+        if self.verbosity >= 3:
             cv2.imshow("binarized image", preprocessor.resize_img(np.hstack(painted_columns)))
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
-        smoothed_columns = self._remove_small_white_boxes(painted_columns, verbosity=verbosity) 
-        smoothed_columns = self._remove_isolated_black_boxes(smoothed_columns, verbosity=verbosity)
-        if verbosity >= 2:
+        smoothed_columns = self._remove_small_white_boxes(painted_columns) 
+        smoothed_columns = self._remove_isolated_black_boxes(smoothed_columns)
+        if self.verbosity >= 3:
             cv2.imshow("smoothed", preprocessor.resize_img(np.hstack(smoothed_columns)))
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
         # now we need to try to extend some of the lines that we chopped off when deleting the large black rectangles
 
-        self._dialation_operation(smoothed_columns, verbosity=verbosity)
+        #columns = self._dialation_operation(columns)
 
         # We need to process these chunks now
         word_layout = []
@@ -109,6 +104,7 @@ class ProcessingLineSegmenter(LineSegmenter):
         graph = self._construct_graph(word_layout)
         components = self._traverse_graph(graph)
         lines = self._create_lines(components, proccessed_img, chunk_width)
+
         return lines
     
     def _paint_column(self, column: np.ndarray) -> np.ndarray:
@@ -141,7 +137,7 @@ class ProcessingLineSegmenter(LineSegmenter):
         
         return column_boxes
     
-    def _remove_small_white_boxes(self, columns:list[np.ndarray], verbosity:int=0):
+    def _remove_small_white_boxes(self, columns:list[np.ndarray]):
         """Goes through the columns of our processed image and fills in white rectangles
         that are unusually small
         
@@ -160,7 +156,7 @@ class ProcessingLineSegmenter(LineSegmenter):
 
 
         #removing small while sections
-        if verbosity>=4:
+        if self.verbosity>=4:
             # display line statistics
             data = np.concatenate(all_white_heights)
             kde = KernelDensity(bandwidth=50).fit(data.reshape(-1, 1))
@@ -185,14 +181,14 @@ class ProcessingLineSegmenter(LineSegmenter):
                     # fill box black
                     columns[i][box[0]:box[1]+1, :] = 0
         
-        if verbosity>=4:
+        if self.verbosity>=4:
             cv2.imshow("white chunks removed", preprocessor.resize_img(np.hstack(columns)))
             cv2.waitKey(0)
             cv2.destroyAllWindows()
 
         return columns
 
-    def _remove_isolated_black_boxes(self, columns: list[np.ndarray], verbosity=0) -> list[np.ndarray]:
+    def _remove_isolated_black_boxes(self, columns: list[np.ndarray]) -> list[np.ndarray]:
         """Second cleanup step. We need to remove the black boxes that are isolated from other boxes."""
         all_black_boxes = []
         all_black_heights = []
@@ -221,7 +217,7 @@ class ProcessingLineSegmenter(LineSegmenter):
                 if box[1]-box[0] < 0.5*T:
                     columns[i][box[0]:box[1]+1, :] = 255
 
-        if verbosity>=4:
+        if self.verbosity>=4:
             cv2.imshow("dangling black boxes removed", preprocessor.resize_img(np.hstack(columns)))
             cv2.waitKey(0)
             cv2.destroyAllWindows()
@@ -233,7 +229,8 @@ class ProcessingLineSegmenter(LineSegmenter):
         """creates a list of word labels"""
         lines = []
         for component in components:
-            lines.append(Line(image, component, chunk_width, self.word_segmenter))
+            line_img = self._create_line_image(image, component, chunk_width)
+            lines.append(Line(line_img, self.word_segmenter))
         return lines
 
     def _traverse_graph(self, graph):
@@ -261,7 +258,7 @@ class ProcessingLineSegmenter(LineSegmenter):
             state[node] = "P"
         return component, state
 
-    def _dialation_operation(self, columns: np.ndarray, connection_distance=2, verbosity=0):
+    def _dialation_operation(self, columns: np.ndarray, connection_distance=2):
         """when we dialate boxes, we need to do two things:
         First, make sure that horizontal cavities are filled,
         so holes in chunks, or divots in the horizontal direction.
@@ -511,19 +508,29 @@ class ProcessingLineSegmenter(LineSegmenter):
         for chunk in line.chunks:
             pass
     
-    def clean_up_lines(self, lines):
-        """oftentimes there are some issues with how lines are detected
-        3 further processing steps are required:
-        1. splitting connected layers
-        2. combining chunks on the same line
-        3. removing/recombining degenerate lines"""
-        pass
+    def _create_line_image(self, img, pieces, piece_width):
+        min_lane = min(pieces, key=lambda x: x[0])[0]
+        max_lane = max(pieces, key=lambda x: x[0])[0]
 
-        for line in lines:
-            locations = self._get_number_lines(line)
-            if len(locations) > 1:
-                classified_chunks = self._assign_chunks_to_line(line, locations)
-    
+        x1 = int(min_lane * piece_width)
+        x2 = int((max_lane + 1) * piece_width)
+        y1 = min(pieces, key=lambda x: x[1])[1]
+        y2 = max(pieces, key=lambda x: x[2])[2]
 
-if __name__ == "__main__":
-   pass 
+        pieces_img = np.ones((y2-y1, x2-x1)) * 255
+        for piece in pieces:
+            chunk_x1 = int(piece[0] * piece_width)
+            chunk_x2 = int((piece[0] + 1) * piece_width)
+            chunk_y1 = piece[1]
+            chunk_y2 = piece[2]
+
+            local_x1 = chunk_x1 - x1
+            local_x2 = chunk_x2 - x1
+            local_y1 = chunk_y1 - y1
+            local_y2 = chunk_y2 - y1
+
+            pieces_img[local_y1:local_y2,
+                       local_x1:local_x2] = img[chunk_y1:chunk_y2, chunk_x1: chunk_x2]
+        return pieces_img.astype(np.uint8)
+
+ 

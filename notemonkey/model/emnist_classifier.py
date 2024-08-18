@@ -5,7 +5,9 @@ from model.basemodel import BaseModel
 import preprocessor
 
 class EMNISTModel(BaseModel):
-    def __init__(self, filepath: str, class_mapping_path: str):
+    def __init__(self, filepath: str, class_mapping_path: str, verbosity:int=0):
+        super().__init__(verbosity=verbosity)
+
         self.model = keras.models.load_model(filepath) 
         self.class_mapping = {}
         with open(class_mapping_path) as file:
@@ -13,20 +15,21 @@ class EMNISTModel(BaseModel):
                 index, character_code = line.split()
                 self.class_mapping[int(index)] = chr(int(character_code))
     
-    def predict(self, image: np.ndarray, verbosity=0):
-        if verbosity >= 2:
+    def predict(self, image: np.ndarray):
+        if self.verbosity >= 3:
             cv2.imshow('input image', image) 
 
-        processed_image = self._preprocess(image, verbosity=verbosity)
+        processed_image = self._preprocess(image)
         prediction = self.model.predict(np.array([processed_image]))
         classification = self._postprocess(prediction)
         
-        if verbosity >= 2:  
+        if self.verbosity >= 2 or classification == 'L':  
             cv2.imshow(f"class: {classification}",cv2.resize(processed_image, (100,100)))
             cv2.waitKey(0)
+            cv2.destroyAllWindows()
         return classification
 
-    def _preprocess(self, image, verbosity=0):
+    def _preprocess(self, image):
         #need to convert the image to 24x24 white on black
         # assume it is already greyscale and binarised
         #TODO have checks for this 
@@ -37,7 +40,7 @@ class EMNISTModel(BaseModel):
            image = image.astype(np.uint8)
 
         cropped = preprocessor.crop_image_tight(image)
-        if verbosity >= 4:
+        if self.verbosity >= 4:
             cv2.imshow('cropped image', cropped)
             cv2.waitKey(0)
 
@@ -45,7 +48,7 @@ class EMNISTModel(BaseModel):
         padded_image = (np.ones((cropped.shape[0] + 2*padding_size, cropped.shape[1]))*255).astype(np.uint8)
         padded_image[padding_size:padding_size+cropped.shape[0], :] = cropped
 
-        if verbosity >= 4:
+        if self.verbosity >= 4:
             cv2.imshow('verticle padding', padded_image)
             cv2.waitKey(0)
         # Now, to add side padding to make it square
@@ -56,7 +59,7 @@ class EMNISTModel(BaseModel):
         x_start = int(max(squared_image.shape[1]/2 - padded_image.shape[1]/2, 0))
         squared_image[:, x_start:x_start+padded_image.shape[1]] = padded_image
         
-        if verbosity >= 4:
+        if self.verbosity >= 4:
             cv2.imshow('squared image', squared_image)
             cv2.waitKey(0)
 
@@ -66,7 +69,7 @@ class EMNISTModel(BaseModel):
         inverted = np.fliplr(inverted)
         rotated = cv2.rotate(inverted, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
-        if verbosity >= 4:
+        if self.verbosity >= 3:
             cv2.imshow('formatted_image', preprocessor.resize_img(rotated, resize_factor=4))
             cv2.waitKey(0)
 

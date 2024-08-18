@@ -79,7 +79,12 @@ class TestPreprocessor():
         img = np.array([[[255,255,255]]], np.uint8)     
         output = preprocessor.preprocess_img(img)
         assert np.all(output == img)
-        
+
+    def test_preprocess_1pixel_greyscale(self):
+        img = np.array([[255]], np.uint8)
+        output = preprocessor.preprocess_img(img)
+        assert np.all(output == img)
+
     def test_greyscale_image(self):
         img = np.array([[255,0,255]], np.uint8)
         output = preprocessor.preprocess_img(img)
