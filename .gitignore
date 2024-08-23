@@ -3,9 +3,12 @@
 .vscode
 detection-dataset
 lines-dataset
+datasets
 __pycache__
 models
 
 *.png
 *.jpg
 *.zip
+
+!exampleoutput.png
